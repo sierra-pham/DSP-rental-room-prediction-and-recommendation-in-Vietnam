@@ -373,17 +373,20 @@ def parse_price_vnd(text: str) -> int | None:
     t = normalise_text(text)
     if "thỏa thuận" in t or "thoa thuan" in t:
         return None
-    m = re.search(r"(\d+)\s*tr(?:iệu)?\s*(\d+)?", t)
+    # The whole part may carry a decimal separator. It must be part of this pattern,
+    # not a separate fallback: on "7.5 triệu" a leading r"(\d+)\s*tr" skips the "7."
+    # and matches "5 triệu", silently returning 5_000_000.
+    m = re.search(r"(\d+(?:[.,]\d+)?)\s*tr(?:iệu)?\s*(\d+)?", t)
     if m:
-        whole = int(m.group(1))
-        frac = m.group(2)
+        whole, frac = m.group(1), m.group(2)
+        if "." in whole or "," in whole:
+            # "7.5 triệu" -> 7.5 million. A decimal whole part is the whole value,
+            # so any trailing digits are not a fraction.
+            return int(float(whole.replace(",", ".")) * 1_000_000)
         if frac is None:
-            return whole * 1_000_000
+            return int(whole) * 1_000_000
         # "7tr5" -> 7.5 million; "12tr500" -> 12.5 million
-        return whole * 1_000_000 + int(frac) * (10 ** (6 - len(frac)))
-    m = re.search(r"([\d.,]+)\s*(?:triệu)", t)
-    if m:
-        return int(float(m.group(1).replace(",", ".")) * 1_000_000)
+        return int(whole) * 1_000_000 + int(frac) * (10 ** (6 - len(frac)))
     m = re.search(r"([\d.,]+)\s*(?:nghìn|ngàn|k)\b", t)
     if m:
         return int(float(m.group(1).replace(",", ".")) * 1_000)
