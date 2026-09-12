@@ -33,3 +33,9 @@ data/
 .obsidian/themes/
 .obsidian/snippets/
 .trash/
+
+# SDD scratch workspace
+.superpowers/
+
+# Claude Code: machine-specific permissions, never commit
+.claude/settings.local.json
