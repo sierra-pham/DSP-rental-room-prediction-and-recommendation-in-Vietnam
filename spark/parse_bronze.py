@@ -16,6 +16,7 @@ Usage:
 import argparse
 import base64
 import datetime
+import functools
 import gzip
 import logging
 
@@ -33,7 +34,14 @@ from pyspark.sql.types import (
     StructType,
 )
 
-from parsers.normalise import normalise_province
+from parsers.normalise import (
+    FURNISHING_VALUES,
+    _PHONE_RE,
+    normalise_district,
+    normalise_furnishing,
+    normalise_province,
+    strip_pii,
+)
 
 _log = logging.getLogger(__name__)
 
@@ -93,7 +101,22 @@ MIN_PARSE_RATE = 0.95
 # every field --- so a site redesign shows up as parse_ok rows with nothing in
 # them, which every other rule allows. Cap the share of those too.
 MAX_EMPTY_PARSE_RATE = 0.05
-PHONE = r"(?:\+?84|0)[0-9]{9,10}"
+# The gate audits the stripper, so it uses the stripper's own pattern: a
+# narrower one would pass numbers `strip_pii` is meant to have removed.
+PHONE = _PHONE_RE.pattern
+
+# Identifiers are ours, not the seller's. A listing id or a URL full of digits
+# can match a phone pattern, and failing the day over one would be a false
+# positive; everything else in silver is free text a seller could have typed.
+PII_EXEMPT_COLUMNS = frozenset(
+    {"listing_id", "source", "url", "content_hash", "crawl_ts", "dt"}
+)
+# Derived from the schema, so a column added to silver tomorrow is scanned
+# tomorrow --- nobody has to remember to extend the gate.
+PII_SCAN_COLUMNS = [
+    field.name for field in SILVER_SCHEMA.fields
+    if isinstance(field.dataType, StringType) and field.name not in PII_EXEMPT_COLUMNS
+]
 
 # Parquet parts of 128-256 MB. A day of silver is ~30k listings without the
 # HTML, comfortably one part; writing it with the cluster's 24 shuffle
@@ -135,6 +158,9 @@ def _silver_row(bronze: dict, dt: str, parsers: dict) -> dict:
         "crawl_ts": bronze.get("crawl_ts"),
         "crawl_date": _crawl_date(bronze.get("crawl_ts")),
         "amenities": [],
+        # Spec 3.2 has no null furnishing: "unknown" is a state, a null would
+        # read as "not parsed yet". Rows that never reach a parser keep it.
+        "furnishing": "unknown",
         "content_hash": bronze.get("content_hash"),
         "is_active": bronze.get("http_status") == 200,
         "parse_ok": False,
@@ -152,9 +178,19 @@ def _silver_row(bronze: dict, dt: str, parsers: dict) -> dict:
         return row
 
     try:
-        html = gzip.decompress(base64.b64decode(bronze["html_gz_b64"])).decode("utf-8")
+        raw = gzip.decompress(base64.b64decode(bronze["html_gz_b64"]))
     except Exception as exc:
         row["parse_error"] = f"decompress: {type(exc).__name__}"
+        return row
+
+    # Decoding is its own failure: a page that gunzips but is not UTF-8 is a
+    # crawler encoding bug, not a corrupt payload, and the two get fixed in
+    # different places. Decoding stays strict --- silently replacing bytes
+    # would put mojibake in silver and no error anywhere.
+    try:
+        html = raw.decode("utf-8")
+    except UnicodeDecodeError:
+        row["parse_error"] = "decode: UnicodeDecodeError"
         return row
 
     try:
@@ -169,8 +205,14 @@ def _silver_row(bronze: dict, dt: str, parsers: dict) -> dict:
     bathrooms = parsed.get("bathrooms")
     latitude = parsed.get("latitude")
     longitude = parsed.get("longitude")
+    # PII is stripped on the way into silver, not trusted to have been
+    # stripped upstream: a phone number in a title is as much a leak as one in
+    # the description, and `pii_gate` fails the whole day over it.
+    title = parsed.get("title")
+    address = parsed.get("address")
+    furnishing = normalise_furnishing(bronze.get("source"), parsed.get("furnishing"))
     row.update({
-        "title": parsed.get("title"),
+        "title": strip_pii(title) if title else None,
         "asking_rent_vnd": None if rent is None else int(rent),
         "area_sqm": None if area is None else float(area),
         "bedrooms": None if bedrooms is None else int(bedrooms),
@@ -178,12 +220,14 @@ def _silver_row(bronze: dict, dt: str, parsers: dict) -> dict:
         "property_type": parsed.get("property_type"),
         # The parsers return the site's own spelling; silver stores the code.
         "province": normalise_province(parsed.get("province")),
-        "district": parsed.get("district"),
+        # Spec 3.2: stored normalised and diacritic-stripped, so "Quận 3",
+        # "Q.3" and "quan 3" are one district across the four sources.
+        "district": normalise_district(parsed.get("district")),
         "ward": parsed.get("ward"),
-        "address": parsed.get("address"),
+        "address": strip_pii(address) if address else None,
         "latitude": None if latitude is None else float(latitude),
         "longitude": None if longitude is None else float(longitude),
-        "furnishing": parsed.get("furnishing"),
+        "furnishing": furnishing,
         "description_clean": parsed.get("description_clean"),
         "parse_ok": True,
     })
@@ -210,9 +254,16 @@ def parse_partition(df: DataFrame, dt: str) -> DataFrame:
 def pii_gate(df: DataFrame) -> None:
     """No phone number may survive into silver (WBS 4.2.1).
 
-    The parsers already run `strip_pii`; this is the audit that says so.
+    The parsers and `_silver_row` already run `strip_pii`; this is the audit
+    that says so, over every free-text column at once rather than the one it
+    used to check.
     """
-    leaks = df.filter(F.col("description_clean").rlike(PHONE)).count()
+    predicate = functools.reduce(
+        lambda acc, name: acc | F.col(name).rlike(PHONE),
+        PII_SCAN_COLUMNS[1:],
+        F.col(PII_SCAN_COLUMNS[0]).rlike(PHONE),
+    )
+    leaks = df.filter(predicate).count()
     if leaks > 0:
         raise RuntimeError(f"PII gate failed: {leaks} rows contain phone numbers")
 
@@ -256,6 +307,29 @@ def quality_gate(df: DataFrame) -> None:
     unmapped = df.filter(F.col("province").isNull()).count()
     if unmapped > 0:
         _log.warning("province unmapped on %d of %d rows", unmapped, total)
+
+    # Spec 3.2 enum. Null is a violation too: `_silver_row` writes "unknown"
+    # on every path, so a null here means a row got into silver past it.
+    bad_furnishing = df.filter(
+        F.col("furnishing").isNull() | ~F.col("furnishing").isin(*FURNISHING_VALUES)
+    ).count()
+    if bad_furnishing > 0:
+        raise RuntimeError(
+            f"Quality gate [furnishing]: {bad_furnishing} rows outside "
+            f"{list(FURNISHING_VALUES)}"
+        )
+
+    # A crawl that crosses 00:00 UTC keeps writing to the partition it started
+    # on, so crawl_date drifting from dt is expected and must not fail the day
+    # --- but a large share of it means the crawl ran far longer than planned.
+    drifted = df.filter(
+        F.col("crawl_date").isNotNull() & (F.col("crawl_date") != F.to_date(F.col("dt")))
+    ).count()
+    if drifted > 0:
+        _log.warning(
+            "crawl_date differs from dt on %d of %d rows (%.1f%%)",
+            drifted, total, 100 * drifted / total,
+        )
 
     duplicates = (df.groupBy("dt", "source", "listing_id").count()
                     .filter(F.col("count") > 1).count())

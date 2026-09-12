@@ -12,6 +12,7 @@ import config
 
 _log = logging.getLogger(__name__)
 _PT_MAP = None
+_FURN_MAP = None
 
 _PHONE_RE = re.compile(r"(?:\+?84|0)[\s.\-]?\d{2,3}[\s.\-]?\d{3}[\s.\-]?\d{3,4}")
 _EMAIL_RE = re.compile(r"[\w.+-]+@[\w-]+\.[\w.]+")
@@ -28,6 +29,14 @@ _AREA_RE = re.compile(r"([\d]+(?:[.,]\d+)?)\s*m(?:2|²)")
 # ("TPHCM", "Tp Hồ Chí Minh", "Sài Gòn"), so match on a lowered,
 # diacritic-free key with the administrative prefix removed.
 _PROVINCE_PREFIX_RE = re.compile(r"^(?:tp\.?|thanh pho|tinh)\s*")
+# District spellings carry the administrative prefix inconsistently: "Quận 3"
+# on mogi, "Q.7" elsewhere, a bare "Bình Thạnh" on batdongsan. Silver stores the
+# bare name so the blocking key in spec 4.x matches across sources.
+_DISTRICT_PREFIX_RE = re.compile(r"^(?:quan|huyen|thanh pho|thi xa|tp|q)\s*[.\s]\s*")
+
+# Spec 3.2: furnishing is this enum and nothing else.
+FURNISHING_VALUES = ("none", "basic", "full", "unknown")
+
 _PROVINCE_CODES = {
     "ho chi minh": "HCM",
     "hcm": "HCM",
@@ -115,6 +124,46 @@ def normalise_province(raw: str | None) -> str | None:
         return None
     key = _PROVINCE_PREFIX_RE.sub("", _strip_diacritics(normalise_text(raw))).strip()
     return _PROVINCE_CODES.get(key)
+
+
+def normalise_district(raw: str | None) -> str | None:
+    """Bare, lowered, diacritic-free district name --- "Quận Gò Vấp" -> "go vap".
+
+    Spec 3.2 stores `district` normalised and diacritic-stripped so the four
+    sources' spellings collide on one key. The administrative prefix is dropped
+    because only some sources write it; "Quận 3" and "Q.3" are the same place.
+    Returns None when there is nothing left to store.
+    """
+    if not raw:
+        return None
+    key = _DISTRICT_PREFIX_RE.sub("", _strip_diacritics(normalise_text(raw))).strip()
+    return key or None
+
+
+def normalise_furnishing(source: str, raw: str | None) -> str:
+    """Map a site's furnishing string onto the spec 3.2 enum. Never None.
+
+    Unmapped is "unknown", not a guess: a wrong furnishing reads as a fact in
+    the mart, whereas "unknown" reads as the absence of one. The warning is what
+    tells us a site added a value.
+    """
+    global _FURN_MAP
+    if _FURN_MAP is None:
+        _FURN_MAP = config.load("furnishing_map")
+    if not raw:
+        return "unknown"
+    mapping = _FURN_MAP.get(source, {})
+    if raw in mapping:
+        return mapping[raw]
+    raw_lower = raw.lower().strip()
+    for key, val in mapping.items():
+        if key.lower().strip() == raw_lower:
+            return val
+    # phongtro123's parser resolves NTĐB/NTCB itself, so it hands us the enum.
+    if raw_lower in FURNISHING_VALUES:
+        return raw_lower
+    _log.warning("Unmapped furnishing: source=%s raw=%r", source, raw)
+    return "unknown"
 
 
 def normalise_property_type(source: str, raw: str) -> str:

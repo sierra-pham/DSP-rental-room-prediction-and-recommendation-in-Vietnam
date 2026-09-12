@@ -16,6 +16,12 @@ from pathlib import Path
 
 import pytest
 
+# Without the [spark] extra this whole module is unrunnable; skipping says so,
+# where a collection error would read as a broken test file.
+pytest.importorskip("pyspark")
+
+from parsers.normalise import FURNISHING_VALUES, _PHONE_RE
+
 from spark.parse_bronze import (
     BRONZE_SCHEMA,
     SILVER_SCHEMA,
@@ -34,6 +40,23 @@ SOURCE_URLS = {
     "phongtro123": "https://phongtro123.com/x-pr712920.html",
     "mogi": "https://mogi.vn/x-id22742913",
     "nhatot": "https://www.nhatot.com/x/134122706.htm",
+}
+
+
+# Measured against the four fixtures, not assumed. The raw values behind them
+# are "Bình Thạnh"/"Đầy đủ", "Quận Gò Vấp"/"basic", "Quận 3"/None and
+# "Quận 7"/"Nội thất đầy đủ".
+EXPECTED_DISTRICT = {
+    "batdongsan": "binh thanh",
+    "phongtro123": "go vap",
+    "mogi": "3",
+    "nhatot": "7",
+}
+EXPECTED_FURNISHING = {
+    "batdongsan": "full",
+    "phongtro123": "basic",
+    "mogi": "unknown",
+    "nhatot": "full",
 }
 
 
@@ -70,7 +93,7 @@ _CLEAN_SILVER = {
     "url": SOURCE_URLS["batdongsan"], "crawl_ts": "2026-09-20T03:00:00+00:00",
     "crawl_date": date(2026, 9, 20), "title": "Cho thue",
     "asking_rent_vnd": 9_500_000, "area_sqm": 45.0, "bedrooms": 1, "bathrooms": 1,
-    "property_type": "apartment", "province": "HCM", "district": "Binh Thanh",
+    "property_type": "apartment", "province": "HCM", "district": "binh thanh",
     "ward": None, "address": "280/75", "latitude": 10.79, "longitude": 106.69,
     "furnishing": "full", "amenities": [], "description_clean": "can ho dep",
     "posted_date": None, "image_count": None, "content_hash": "sha256:abc",
@@ -106,6 +129,10 @@ def test_parse_bronze_local(spark):
     assert row["asking_rent_vnd"] == 9_500_000
     assert row["area_sqm"] == 45.0
     assert row["property_type"] == "apartment"
+    # Measured: the parser returns "Bình Thạnh" / "Đầy đủ"; silver stores the
+    # diacritic-stripped district and the furnishing enum (spec 3.2).
+    assert row["district"] == "binh thanh"
+    assert row["furnishing"] == "full"
     assert row["content_hash"] == "sha256:abc"
     assert row["amenities"] == []
     assert row["ward"] is None
@@ -138,6 +165,8 @@ def test_parse_bronze_parses_every_source(spark):
         assert row["listing_id"] == f"{source}:bronze-1"
         assert row["province"] == "HCM"
         assert row["dt"] == DT
+        assert row["district"] == EXPECTED_DISTRICT[source], source
+        assert row["furnishing"] == EXPECTED_FURNISHING[source], source
 
 
 def test_parse_bronze_handles_bad_html(spark):
@@ -199,11 +228,14 @@ def test_parse_bronze_skips_non_200_rows(spark):
 
 
 def test_parse_bronze_strips_pii(spark):
+    """title and address go through the stripper too, not just description."""
     df = _bronze_df(spark, [_bronze_row(_fixture_html("batdongsan"), "batdongsan:pr1")])
 
     rows = parse_partition(df, DT).collect()
 
-    assert not re.search(r"(?:\+?84|0)\d{9}", rows[0]["description_clean"] or "")
+    for field in ("title", "address", "description_clean"):
+        value = rows[0][field] or ""
+        assert not _PHONE_RE.search(value), f"{field} leaked: {value!r}"
 
 
 def test_pii_gate_passes_clean_rows(spark):
@@ -214,6 +246,49 @@ def test_pii_gate_fails_on_a_phone_number(spark):
     df = _silver_df(spark, {}, {"description_clean": "lien he 0901234567 de xem phong"})
 
     with pytest.raises(RuntimeError, match="PII gate failed: 1 rows contain phone numbers"):
+        pii_gate(df)
+
+
+@pytest.mark.parametrize("column", ["title", "address", "ward", "description_clean"])
+def test_pii_gate_fails_on_a_phone_number_in_any_free_text_column(spark, column):
+    """description_clean is not the only place a phone number can land."""
+    df = _silver_df(spark, {}, {"listing_id": "batdongsan:pr2",
+                                "description_clean": "can ho dep",
+                                column: "lien he 0901234567 de xem phong"})
+
+    with pytest.raises(RuntimeError, match="PII gate failed: 1 rows contain phone numbers"):
+        pii_gate(df)
+
+
+def test_pii_gate_scans_every_free_text_column_in_the_schema(spark):
+    """The predicate is built from SILVER_SCHEMA, so a new column is covered
+    the day it is added --- nobody has to remember to extend the gate."""
+    from spark.parse_bronze import PII_SCAN_COLUMNS
+
+    identifiers = {"listing_id", "source", "url", "content_hash", "crawl_ts", "dt"}
+    expected = [f.name for f in SILVER_SCHEMA.fields
+                if f.dataType.simpleString() == "string" and f.name not in identifiers]
+
+    assert PII_SCAN_COLUMNS == expected
+    assert "title" in PII_SCAN_COLUMNS and "address" in PII_SCAN_COLUMNS
+    assert not identifiers & set(PII_SCAN_COLUMNS)
+
+
+def test_pii_gate_ignores_the_identifier_columns(spark):
+    """A listing id that happens to look like a phone number is not a leak:
+    failing on it would abort the day over an id the site chose."""
+    df = _silver_df(spark, {"listing_id": "batdongsan:0901234567",
+                            "url": "https://batdongsan.com.vn/x/0901234567"})
+
+    pii_gate(df)
+
+
+def test_pii_gate_uses_the_strippers_own_pattern(spark):
+    """A separated number ("090.123.4567") is what the stripper catches; the
+    gate must not use a narrower pattern than the thing it audits."""
+    df = _silver_df(spark, {"description_clean": "goi 090.123.4567 nhe"})
+
+    with pytest.raises(RuntimeError, match="PII gate failed: 1 rows"):
         pii_gate(df)
 
 
@@ -285,3 +360,91 @@ def test_quality_gate_rejects_a_low_parse_rate(spark):
 
     with pytest.raises(RuntimeError, match="parse_rate"):
         quality_gate(_silver_df(spark, *rows))
+
+
+def test_quality_gate_rejects_a_furnishing_outside_the_enum(spark):
+    df = _silver_df(spark, {}, {"listing_id": "batdongsan:pr2",
+                                "furnishing": "Đầy đủ"})
+
+    with pytest.raises(RuntimeError, match=r"furnishing.*1 rows"):
+        quality_gate(df)
+
+
+def test_quality_gate_rejects_a_null_furnishing(spark):
+    """Silver stores "unknown", never a null: a null would read as "not yet
+    parsed" downstream, which is a different claim."""
+    df = _silver_df(spark, {}, {"listing_id": "batdongsan:pr2", "furnishing": None})
+
+    with pytest.raises(RuntimeError, match=r"furnishing.*1 rows"):
+        quality_gate(df)
+
+
+@pytest.mark.parametrize("value", ["none", "basic", "full", "unknown"])
+def test_quality_gate_allows_every_enum_furnishing(spark, value):
+    quality_gate(_silver_df(spark, {"furnishing": value}))
+
+
+def test_parse_bronze_never_leaves_furnishing_null(spark):
+    """Including the rows that never reach a parser."""
+    rows = [
+        _bronze_row(_fixture_html("batdongsan"), "batdongsan:ok"),
+        _bronze_row("", "batdongsan:gone", http_status=404),
+        _bronze_row("<html></html>", "zillow:1", source="zillow"),
+        _bronze_row("", "batdongsan:empty"),
+    ]
+
+    out = parse_partition(_bronze_df(spark, rows), DT).collect()
+
+    assert len(out) == 4
+    for row in out:
+        assert row["furnishing"] in FURNISHING_VALUES, row["listing_id"]
+    by_id = {row["listing_id"]: row["furnishing"] for row in out}
+    assert by_id["batdongsan:ok"] == "full"
+    assert by_id["batdongsan:gone"] == "unknown"
+    assert by_id["zillow:1"] == "unknown"
+    assert by_id["batdongsan:empty"] == "unknown"
+
+
+def test_quality_gate_warns_on_a_crawl_date_that_is_not_the_partition_day(spark, caplog):
+    """A run crossing 00:00 UTC files under its start date. That is expected,
+    so it is a warning --- but never a silent one."""
+    df = _silver_df(
+        spark,
+        {},
+        {"listing_id": "batdongsan:pr2", "crawl_ts": "2026-09-21T00:30:00+00:00",
+         "crawl_date": date(2026, 9, 21)},
+    )
+
+    with caplog.at_level("WARNING", logger="spark.parse_bronze"):
+        quality_gate(df)
+
+    assert "crawl_date" in caplog.text
+    assert "1 of 2" in caplog.text
+
+
+def test_quality_gate_is_silent_when_every_crawl_date_matches_dt(spark, caplog):
+    with caplog.at_level("WARNING", logger="spark.parse_bronze"):
+        quality_gate(_silver_df(spark, {}, {"listing_id": "batdongsan:pr2"}))
+
+    assert "crawl_date" not in caplog.text
+
+
+def test_parse_partition_on_an_empty_bronze_frame(spark):
+    """A day with no bronze rows is an empty silver frame with the right shape,
+    not a crash --- the quality gate is what decides an empty day is a failure."""
+    out = parse_partition(_bronze_df(spark, []), DT)
+
+    assert out.schema == SILVER_SCHEMA
+    assert out.count() == 0
+
+
+def test_parse_bronze_records_a_decode_failure(spark):
+    """Valid gzip, invalid UTF-8: that is a decode problem, not a decompress
+    one, and the parse_error has to say which so the fix is obvious."""
+    payload = base64.b64encode(gzip.compress(bytes([0xFF, 0xFE]) + b" not utf-8")).decode("ascii")
+    df = _bronze_df(spark, [_bronze_row("", "batdongsan:mojibake", html_gz_b64=payload)])
+
+    rows = parse_partition(df, DT).collect()
+
+    assert rows[0]["parse_ok"] is False
+    assert rows[0]["parse_error"] == "decode: UnicodeDecodeError"

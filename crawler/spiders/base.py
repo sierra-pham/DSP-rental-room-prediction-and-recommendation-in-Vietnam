@@ -24,6 +24,16 @@ from crawler.frontier import Frontier, default_db_path
 from crawler.s3_writer import S3BatchWriter
 
 
+def utc_today() -> str:
+    """Today's date in UTC, as `YYYY-MM-DD`.
+
+    The bronze `dt=` partition and `crawl_ts` must agree on a clock. This host
+    runs at UTC+7, so `date.today()` would put a page fetched at 01:00 local
+    under tomorrow's partition while its own `crawl_ts` still said yesterday.
+    """
+    return dt.datetime.now(dt.timezone.utc).date().isoformat()
+
+
 def build_bronze_record(source: str, url: str, status: int, raw: bytes,
                          fetch_ms: float, crawl_kind: str = "discovery") -> dict:
     """Build the bronze record dict for one fetched page.
@@ -60,7 +70,7 @@ class BronzeSpider(scrapy.Spider):
         super().__init__(*args, **kwargs)
         self.frontier = Frontier(db_path or default_db_path())
         aws_cfg = config.load("aws")
-        today = dt.date.today().isoformat()
+        today = utc_today()
         self.writer = S3BatchWriter(
             bucket=aws_cfg["bucket"],
             prefix=f"bronze/listings/dt={today}/source={self.name}",

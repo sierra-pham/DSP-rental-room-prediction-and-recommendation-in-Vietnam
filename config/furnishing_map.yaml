@@ -1,0 +1,52 @@
+# Raw furnishing strings -> the spec 3.2 enum (none | basic | full).
+# Same shape as property_type_map.yaml: one block per source, because the four
+# sites each name the same three states differently. Anything not listed here
+# becomes "unknown" (with a warning) rather than a guess -- see
+# parsers.normalise.normalise_furnishing.
+
+batdongsan:
+  # JSON-LD amenityFeature {"Name": "Furnished", "Value": ...}
+  "Đầy đủ": "full"
+  "Đầy đủ nội thất": "full"
+  "Nội thất đầy đủ": "full"
+  "Full nội thất": "full"
+  "Cao cấp": "full"
+  "Nội thất cao cấp": "full"
+  "Cơ bản": "basic"
+  "Nội thất cơ bản": "basic"
+  "Một phần": "basic"
+  "Không nội thất": "none"
+  "Không có nội thất": "none"
+  "Nhà trống": "none"
+  "Bàn giao thô": "none"
+
+phongtro123:
+  # The parser already resolves NTĐB / NTCB to the enum; listed so the map is
+  # the whole vocabulary of the source, not a subset.
+  "full": "full"
+  "basic": "basic"
+  "none": "none"
+
+mogi:
+  # Detail-page info attribute "Nội thất"
+  "Đầy đủ": "full"
+  "Đầy đủ nội thất": "full"
+  "Nội thất đầy đủ": "full"
+  "Cao cấp": "full"
+  "Nội thất cao cấp": "full"
+  "Cơ bản": "basic"
+  "Nội thất cơ bản": "basic"
+  "Một phần": "basic"
+  "Không có": "none"
+  "Không nội thất": "none"
+  "Nhà trống": "none"
+
+nhatot:
+  # ad_params.furnishing_sell.value
+  "Nội thất đầy đủ": "full"
+  "Đầy đủ": "full"
+  "Nội thất cao cấp": "full"
+  "Nội thất cơ bản": "basic"
+  "Cơ bản": "basic"
+  "Không nội thất": "none"
+  "Nhà trống": "none"

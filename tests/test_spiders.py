@@ -1,7 +1,9 @@
+from datetime import datetime, timezone
+
 import scrapy
 import pytest
 
-from crawler.spiders.base import BronzeSpider, build_bronze_record
+from crawler.spiders.base import BronzeSpider, build_bronze_record, utc_today
 from crawler.spiders.batdongsan import BatdongsanSpider
 from crawler.spiders.mogi import MogiSpider
 from crawler.spiders.phongtro123 import Phongtro123Spider
@@ -26,6 +28,28 @@ def test_spider_class_has_expected_name(spider_cls, name):
 def test_writer_prefix_ends_with_source(spider_cls, name, tmp_path):
     spider = spider_cls(db_path=str(tmp_path / "f.db"))
     assert spider.writer._prefix.endswith(f"source={name}")
+
+
+def test_utc_today_is_the_utc_day():
+    assert utc_today() == datetime.now(timezone.utc).date().isoformat()
+
+
+@pytest.mark.parametrize("spider_cls,name", list(zip(ALL_SPIDERS, NAMES)), ids=NAMES)
+def test_writer_prefix_carries_the_utc_day(spider_cls, name, tmp_path):
+    spider = spider_cls(db_path=str(tmp_path / "f.db"))
+    assert f"dt={utc_today()}/" in spider.writer._prefix
+
+
+@pytest.mark.parametrize("spider_cls,name", list(zip(ALL_SPIDERS, NAMES)), ids=NAMES)
+def test_writer_prefix_uses_the_utc_day(spider_cls, name, tmp_path, monkeypatch):
+    """dt= is the UTC day, the same clock crawl_ts uses. Local time here is
+    UTC+7, so a run between 00:00 and 07:00 local would otherwise file the
+    day's pages under tomorrow's partition and the parse job would miss them."""
+    monkeypatch.setattr("crawler.spiders.base.utc_today", lambda: "2026-01-02")
+
+    spider = spider_cls(db_path=str(tmp_path / "f.db"))
+
+    assert "dt=2026-01-02/" in spider.writer._prefix
 
 
 def test_build_bronze_record_derives_listing_id_and_source():

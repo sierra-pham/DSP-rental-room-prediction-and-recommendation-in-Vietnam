@@ -58,17 +58,23 @@ def _java_available() -> bool:
     return shutil.which("java") is not None
 
 
-def _install_worker_flush_fix() -> str | None:
-    """Put the worker `sitecustomize` on PYTHONPATH. Returns the directory."""
+def _install_worker_flush_fix() -> tuple[str, str | None] | None:
+    """Put the worker `sitecustomize` on PYTHONPATH.
+
+    Returns the temp directory and the PYTHONPATH that was there before it, so
+    the fixture can put the environment back: this session-scoped fixture edits
+    a process-global, and anything running after it (a subprocess test, a later
+    session) would otherwise inherit a PYTHONPATH pointing at a deleted dir.
+    """
     if not sys.platform.startswith("win"):
         return None
     path = tempfile.mkdtemp(prefix="pyspark-worker-fix-")
     (Path(path) / "sitecustomize.py").write_text(
         _WORKER_SITECUSTOMIZE, encoding="utf-8", newline="\n"
     )
-    existing = os.environ.get("PYTHONPATH", "")
+    existing = os.environ.get("PYTHONPATH")
     os.environ["PYTHONPATH"] = path + (os.pathsep + existing if existing else "")
-    return path
+    return path, existing
 
 
 @pytest.fixture(scope="session")
@@ -76,7 +82,7 @@ def spark():
     if not _java_available():
         pytest.skip("no JVM found: set JAVA_HOME or put java on PATH")
 
-    fix_dir = _install_worker_flush_fix()
+    fix = _install_worker_flush_fix()
     # Without this the worker is looked up as bare "python", which on Windows
     # is the Microsoft Store stub.
     os.environ.setdefault("PYSPARK_PYTHON", sys.executable)
@@ -92,5 +98,11 @@ def spark():
                .getOrCreate())
     yield session
     session.stop()
-    if fix_dir:
+    if fix:
+        fix_dir, previous = fix
+        # Restore before deleting: the directory must not outlive PYTHONPATH.
+        if previous is None:
+            os.environ.pop("PYTHONPATH", None)
+        else:
+            os.environ["PYTHONPATH"] = previous
         shutil.rmtree(fix_dir, ignore_errors=True)

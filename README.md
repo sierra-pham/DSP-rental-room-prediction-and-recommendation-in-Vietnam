@@ -45,6 +45,10 @@ scrapy crawl phongtro123 -s CLOSESPIDER_PAGECOUNT=100       # smoke test one sou
 ./run_discovery.sh                                          # one pass over all four sources (cron)
 ```
 
+Bronze `dt=` partitions and the parse job's `--date` are **UTC** days, the same clock
+`crawl_ts` uses; a run that crosses 00:00 UTC keeps writing under the day it started on,
+so the tail of that run is parsed by the next day's job.
+
 ## Documents
 
 - [Project charter](docs/01-project-charter.md)

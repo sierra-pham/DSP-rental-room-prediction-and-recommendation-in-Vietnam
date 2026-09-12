@@ -33,6 +33,11 @@ plan_task: ["T9"]
   parser fixtures (`tests/test_spark_jobs.py`, 19 tests green). The cluster run (plan
   step 7) is deferred until the Spark cluster exists ([3.2.1](WBS-3.2.1.md)) - there is
   nothing to submit to from this machine yet.
+- 2026-09-13 - The executors import `parsers.*` inside `mapPartitions`, so the repo has
+  to exist on every node, not just the driver: `infra/submit.sh` (Task 10) must ship it
+  --- `pip install -e .` on each VM, or `spark-submit --py-files` with the packaged
+  sources. A driver-only install passes every local test and dies on the cluster with
+  `ModuleNotFoundError: parsers`.
 
 ## References
 
