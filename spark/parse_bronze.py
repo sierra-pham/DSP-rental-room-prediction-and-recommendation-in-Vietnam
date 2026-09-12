@@ -89,11 +89,17 @@ PROVINCE_CODES = ("HCM", "HN", "DN", "BD", "DNA", "CT")
 RENT_RANGE_VND = (300_000, 500_000_000)
 AREA_RANGE_SQM = (5.0, 1000.0)
 MIN_PARSE_RATE = 0.95
+# A parser that stops finding anything does not raise --- it returns None for
+# every field --- so a site redesign shows up as parse_ok rows with nothing in
+# them, which every other rule allows. Cap the share of those too.
+MAX_EMPTY_PARSE_RATE = 0.05
 PHONE = r"(?:\+?84|0)[0-9]{9,10}"
 
 # Parquet parts of 128-256 MB. A day of silver is ~30k listings without the
 # HTML, comfortably one part; writing it with the cluster's 24 shuffle
-# partitions would leave 24 files of a couple of MB each.
+# partitions would leave 24 files of a couple of MB each. `repartition`, not
+# `coalesce`: coalesce is not a shuffle boundary, so asking it for one output
+# partition would also collapse the parse upstream of it into a single task.
 OUTPUT_PARTS = 1
 
 
@@ -259,12 +265,38 @@ def quality_gate(df: DataFrame) -> None:
             "repeat within (dt, source)"
         )
 
+    # The parse rate is over fetched rows only. A non-200 row was never handed
+    # to a parser, and listings disappear every day --- counting delistings as
+    # parse failures would abort a healthy day and blame the parsers for it.
+    fetched = df.filter(F.col("is_active")).count()
+    if fetched < total:
+        missed = total - fetched
+        _log.warning("non-200 on %d of %d rows (%.1f%%)", missed, total, 100 * missed / total)
+    if fetched == 0:
+        raise RuntimeError(
+            f"Quality gate [parse_rate]: none of the {total} rows were fetched (http 200)"
+        )
+
     parsed = df.filter(F.col("parse_ok")).count()
-    rate = parsed / total
+    rate = parsed / fetched
     if rate < MIN_PARSE_RATE:
         raise RuntimeError(
-            f"Quality gate [parse_rate]: {parsed} of {total} rows parsed "
+            f"Quality gate [parse_rate]: {parsed} of {fetched} fetched rows parsed "
             f"({rate:.1%}), below {MIN_PARSE_RATE:.0%}"
+        )
+
+    # `parsed` is non-zero here: the rule above would have failed otherwise.
+    empty = df.filter(
+        F.col("parse_ok")
+        & F.col("title").isNull()
+        & F.col("asking_rent_vnd").isNull()
+        & F.col("area_sqm").isNull()
+    ).count()
+    empty_rate = empty / parsed
+    if empty_rate > MAX_EMPTY_PARSE_RATE:
+        raise RuntimeError(
+            f"Quality gate [core_fields_null]: {empty} of {parsed} parsed rows carry "
+            f"no title, rent or area ({empty_rate:.1%}), above {MAX_EMPTY_PARSE_RATE:.0%}"
         )
 
 
@@ -291,7 +323,7 @@ if __name__ == "__main__":
     pii_gate(silver)
     quality_gate(silver)
 
-    (silver.coalesce(OUTPUT_PARTS)
+    (silver.repartition(OUTPUT_PARTS)
            .write
            .partitionBy("province", "dt")
            .mode("overwrite")

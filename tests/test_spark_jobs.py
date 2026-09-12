@@ -258,6 +258,26 @@ def test_quality_gate_rejects_a_duplicate_listing_id(spark):
         quality_gate(df)
 
 
+def test_quality_gate_ignores_non_200_rows_in_the_parse_rate(spark):
+    """Delistings are not parse failures: the rate is over fetched rows only."""
+    fetched = [{"listing_id": f"batdongsan:pr{i}"} for i in range(10)]
+    gone = [{"listing_id": f"batdongsan:gone{i}", "is_active": False,
+             "parse_ok": False, "parse_error": "http_status: 404",
+             "title": None, "asking_rent_vnd": None, "area_sqm": None}
+            for i in range(5)]
+
+    quality_gate(_silver_df(spark, *(fetched + gone)))
+
+
+def test_quality_gate_rejects_rows_with_no_core_fields(spark):
+    """A site redesign returns all-None without raising: parse_ok stays True."""
+    rows = [{"listing_id": f"batdongsan:pr{i}", "title": None,
+             "asking_rent_vnd": None, "area_sqm": None} for i in range(20)]
+
+    with pytest.raises(RuntimeError, match=r"core_fields_null.*20"):
+        quality_gate(_silver_df(spark, *rows))
+
+
 def test_quality_gate_rejects_a_low_parse_rate(spark):
     rows = [{"listing_id": f"batdongsan:pr{i}"} for i in range(18)]
     rows.append({"listing_id": "batdongsan:bad", "parse_ok": False,

@@ -30,6 +30,11 @@ plan_task: ["T9"]
   is allowed and logged, not failed. Every rule is tested red on purpose and green on
   clean data. Verification against real silver is deferred with the cluster run
   ([4.1.3](WBS-4.1.3.md)).
+- 2026-09-13 - Review round 1: `parse_rate` now divides by fetched (http 200) rows only,
+  so a day of delistings no longer aborts the job, and the non-200 share is logged
+  instead; added `core_fields_null`, capping at 5% the parsed rows carrying no title,
+  rent or area --- the shape a site redesign takes, since a parser that finds nothing
+  returns nulls rather than raising.
 
 ## References
 
