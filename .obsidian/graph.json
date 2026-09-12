@@ -1,0 +1,17 @@
+{
+  "collapse-filter": false,
+  "search": "",
+  "showTags": true,
+  "showAttachments": false,
+  "hideUnresolved": true,
+  "showOrphans": false,
+  "collapse-color-groups": false,
+  "colorGroups": [
+    { "query": "path:docs/notes/tasks", "color": { "a": 1, "rgb": 5431378 } },
+    { "query": "path:docs/notes/risks", "color": { "a": 1, "rgb": 14701138 } },
+    { "query": "path:docs/notes/sources", "color": { "a": 1, "rgb": 5817378 } },
+    { "query": "path:docs/notes/daily", "color": { "a": 1, "rgb": 11621088 } },
+    { "query": "path:docs -path:docs/notes", "color": { "a": 1, "rgb": 15695624 } }
+  ],
+  "scale": 1
+}

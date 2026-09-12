@@ -19,6 +19,7 @@ rent at that price?*
 | `infra/` | AWS / Oracle Cloud setup scripts. |
 | `tests/` | pytest suite; `tests/fixtures/` holds saved HTML. |
 | `docs/` | Charter, technical design spec, implementation plan, schedule, risk register. |
+| `docs/notes/` | Obsidian working vault: per-task and per-risk notes, portal research, daily run log. |
 
 ## Setup
 
@@ -36,3 +37,7 @@ Requires Python 3.11+. PySpark 3.5.1 must match the Spark version on the cluster
 - [Project charter](docs/01-project-charter.md)
 - [Technical design spec](docs/02-technical-design-spec.md)
 - [Implementation plan](docs/03-implementation-plan.md)
+- [Work breakdown structure](docs/07-work-breakdown-structure.md)
+- [Risk register](docs/05-risk-register.md)
+- [Working notes vault](docs/notes/README.md) — open the repo root in Obsidian; see
+  [Dashboard](docs/notes/Dashboard.md)

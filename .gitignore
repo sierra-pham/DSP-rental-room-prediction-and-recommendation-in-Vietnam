@@ -25,3 +25,11 @@ data/
 .ipynb_checkpoints/
 .idea/
 .vscode/
+
+# Obsidian: keep settings, drop per-machine state and plugin code
+.obsidian/workspace.json
+.obsidian/workspace-mobile.json
+.obsidian/plugins/
+.obsidian/themes/
+.obsidian/snippets/
+.trash/

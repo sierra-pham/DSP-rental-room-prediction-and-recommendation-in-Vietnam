@@ -1,0 +1,18 @@
+{
+  "useMarkdownLinks": true,
+  "newLinkFormat": "relative",
+  "alwaysUpdateLinks": true,
+  "attachmentFolderPath": "docs/notes/assets",
+  "newFileLocation": "folder",
+  "newFileFolderPath": "docs/notes",
+  "showUnsupportedFiles": false,
+  "userIgnoreFilters": [
+    ".venv/",
+    ".git/",
+    ".pytest_cache/",
+    "build/",
+    "dist/",
+    "node_modules/",
+    "vn_rental_dsp.egg-info/"
+  ]
+}
