@@ -1,0 +1,27 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.venv/
+build/
+dist/
+
+# Local state (crawl frontier, scrapy job dirs, secrets)
+*.sqlite
+*.db
+.scrapy/
+crawls/
+.env
+*.pem
+
+# Data never lives in git — it lives in S3
+data/
+*.parquet
+*.jsonl
+*.jsonl.gz
+
+# Notebooks / IDE
+.ipynb_checkpoints/
+.idea/
+.vscode/

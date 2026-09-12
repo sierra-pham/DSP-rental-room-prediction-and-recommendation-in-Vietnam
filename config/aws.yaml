@@ -1,0 +1,10 @@
+bucket: vn-rental-dsp
+region: ap-southeast-1
+spark:
+  master_url: "spark://spark-master:7077"
+  master_host: spark-master          # SSH alias in ~/.ssh/config
+  remote_root: /opt/vn-rental-dsp
+  driver_memory: 4g
+  executor_memory: 3g
+  executor_cores: 1
+  shuffle_partitions: 24

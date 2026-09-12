@@ -1,0 +1,29 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "vn-rental-dsp"
+version = "0.1.0"
+description = "Vietnam urban rental market intelligence: crawl, panel, fair-rent and time-on-market models on Spark"
+requires-python = ">=3.11"
+dependencies = [
+  "scrapy>=2.11", "pyyaml>=6.0", "boto3>=1.34", "lxml>=5.0",
+  "pytest>=8.0", "python-dateutil>=2.9",
+]
+
+[project.optional-dependencies]
+spark = ["pyspark==3.5.1", "h3>=4.0", "pandas>=2.2", "pyarrow>=15.0"]
+viz = ["matplotlib>=3.8", "seaborn>=0.13", "folium>=0.16", "plotly>=5.20"]
+js = ["playwright>=1.44", "scrapy-playwright>=0.0.34"]
+
+# Flat layout with several top-level packages: setuptools refuses to
+# auto-discover these, so list them explicitly.
+[tool.setuptools.packages.find]
+include = ["config*", "crawler*", "parsers*", "spark*", "analysis*"]
+
+[tool.setuptools.package-data]
+config = ["*.yaml"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
