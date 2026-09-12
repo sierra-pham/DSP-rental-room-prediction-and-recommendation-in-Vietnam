@@ -6,7 +6,7 @@ element: "4.0 Data Processing & Quality"
 hours: 2
 week: "2"
 week_num: 2
-status: todo
+status: in-progress
 critical_path: false
 depends_on: ["4.1.3"]
 plan_task: ["T9"]
@@ -23,7 +23,13 @@ plan_task: ["T9"]
 
 ## Log
 
-<!-- dated notes as this package progresses -->
+- 2026-09-12 - `spark.parse_bronze.quality_gate` implemented. Rules, each failing with
+  its own name and row count: `row_count` (zero rows), `asking_rent_vnd` outside
+  300,000-500,000,000, `area_sqm` outside 5-1,000, `province` outside the six codes,
+  `listing_id` repeated within `(dt, source)`, `parse_rate` below 95%. A null province
+  is allowed and logged, not failed. Every rule is tested red on purpose and green on
+  clean data. Verification against real silver is deferred with the cluster run
+  ([4.1.3](WBS-4.1.3.md)).
 
 ## References
 

@@ -1,5 +1,10 @@
 import pytest
-from parsers.normalise import parse_price_vnd, parse_area_sqm, strip_pii
+from parsers.normalise import (
+    normalise_province,
+    parse_area_sqm,
+    parse_price_vnd,
+    strip_pii,
+)
 
 
 @pytest.mark.parametrize("text,expected", [
@@ -30,3 +35,28 @@ def test_strip_pii_removes_phone_and_zalo():
     assert "090.123.4567" not in out
     assert "a@b.com" not in out
     assert "<PHONE>" in out and "<EMAIL>" in out
+
+
+@pytest.mark.parametrize("raw,expected", [
+    ("Hồ Chí Minh", "HCM"),
+    ("TP. Hồ Chí Minh", "HCM"),
+    ("TPHCM", "HCM"),
+    ("TP HCM", "HCM"),
+    ("Tp Hồ Chí Minh", "HCM"),
+    ("  sài gòn ", "HCM"),
+    ("Ho Chi Minh", "HCM"),
+    ("Hà Nội", "HN"),
+    ("Thành phố Hà Nội", "HN"),
+    ("hanoi", "HN"),
+    ("Đà Nẵng", "DN"),
+    ("da nang", "DN"),
+    ("Bình Dương", "BD"),
+    ("Tỉnh Bình Dương", "BD"),
+    ("Đồng Nai", "DNA"),
+    ("Cần Thơ", "CT"),
+    ("Khánh Hòa", None),
+    ("", None),
+    (None, None),
+])
+def test_normalise_province(raw, expected):
+    assert normalise_province(raw) == expected

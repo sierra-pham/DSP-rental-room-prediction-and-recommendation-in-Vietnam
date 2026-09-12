@@ -24,6 +24,24 @@ _THOUSAND_RE = re.compile(r"([\d.,]+)\s*(?:nghìn|ngàn|k)\b")
 _BARE_DIGITS_RE = re.compile(r"([\d.,]{7,})")
 _AREA_RE = re.compile(r"([\d]+(?:[.,]\d+)?)\s*m(?:2|²)")
 
+# The six provinces silver partitions by. Sites spell them a dozen ways
+# ("TPHCM", "Tp Hồ Chí Minh", "Sài Gòn"), so match on a lowered,
+# diacritic-free key with the administrative prefix removed.
+_PROVINCE_PREFIX_RE = re.compile(r"^(?:tp\.?|thanh pho|tinh)\s*")
+_PROVINCE_CODES = {
+    "ho chi minh": "HCM",
+    "hcm": "HCM",
+    "sai gon": "HCM",
+    "saigon": "HCM",
+    "ha noi": "HN",
+    "hanoi": "HN",
+    "da nang": "DN",
+    "danang": "DN",
+    "binh duong": "BD",
+    "dong nai": "DNA",
+    "can tho": "CT",
+}
+
 
 def strip_pii(text: str) -> str:
     if not text:
@@ -78,6 +96,25 @@ def parse_area_sqm(text: str) -> float | None:
     t = normalise_text(text)
     m = _AREA_RE.search(t)
     return float(m.group(1).replace(",", ".")) if m else None
+
+
+def _strip_diacritics(text: str) -> str:
+    """Drop combining marks; "đ" has none to drop, so it is mapped by hand."""
+    decomposed = unicodedata.normalize("NFD", text)
+    bare = "".join(ch for ch in decomposed if not unicodedata.combining(ch))
+    return bare.replace("đ", "d").replace("Đ", "D")
+
+
+def normalise_province(raw: str | None) -> str | None:
+    """Map a site's province string onto one of the six silver province codes.
+
+    Returns None for anything outside them --- the parse job keeps the row and
+    the quality gate counts it rather than guessing.
+    """
+    if not raw:
+        return None
+    key = _PROVINCE_PREFIX_RE.sub("", _strip_diacritics(normalise_text(raw))).strip()
+    return _PROVINCE_CODES.get(key)
 
 
 def normalise_property_type(source: str, raw: str) -> str:
