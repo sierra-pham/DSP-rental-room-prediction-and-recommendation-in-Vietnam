@@ -13,12 +13,12 @@ sources:
     needs_js: false
   mogi:
     domain: mogi.vn
-    sitemap_urls: ["https://mogi.vn/sitemap.xml"]
+    sitemap_urls: ["https://mogi.vn/sitemap/sitemap-detail.xml"]   # per robots.txt; /sitemap.xml is 404
     rental_url_pattern: "/thue-"
     needs_js: false
   nhatot:
     domain: nhatot.com
-    sitemap_urls: ["https://www.nhatot.com/sitemap.xml"]
+    sitemap_urls: ["https://www.nhatot.com/sitemap-index.xml"]   # per robots.txt
     rental_url_pattern: "/thue-"
     needs_js: true
     sitemap_only: true   # robots.txt disallows search/filter params

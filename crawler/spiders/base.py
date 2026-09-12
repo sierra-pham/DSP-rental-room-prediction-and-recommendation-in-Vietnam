@@ -20,7 +20,7 @@ import hashlib
 import scrapy
 
 import config
-from crawler.frontier import Frontier
+from crawler.frontier import Frontier, default_db_path
 from crawler.s3_writer import S3BatchWriter
 
 
@@ -56,9 +56,9 @@ class BronzeSpider(scrapy.Spider):
         "DOWNLOAD_DELAY": 1.0,
     }
 
-    def __init__(self, db_path="frontier.db", *args, **kwargs):
+    def __init__(self, db_path=None, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.frontier = Frontier(db_path)
+        self.frontier = Frontier(db_path or default_db_path())
         aws_cfg = config.load("aws")
         today = dt.date.today().isoformat()
         self.writer = S3BatchWriter(

@@ -26,11 +26,24 @@ rent at that price?*
 ```bash
 python -m venv .venv
 .venv/Scripts/activate          # Windows;  source .venv/bin/activate on Linux
-pip install -e ".[spark,viz]"
+pip install -e ".[spark,viz,js]"
+playwright install chromium      # nhatot renders client-side; behind a proxy set HTTPS_PROXY first
 pytest
 ```
 
 Requires Python 3.11+. PySpark 3.5.1 must match the Spark version on the cluster.
+
+## Crawling
+
+The spiders, the sitemap poller and `run_discovery.sh` all share one frontier file:
+`$FRONTIER_DB`, or `./frontier.db` when unset. Set it once on the crawl host.
+
+```bash
+export FRONTIER_DB=/var/data/frontier.db
+python -m crawler.sitemap_poller --all                      # fill the frontier from sitemaps
+scrapy crawl phongtro123 -s CLOSESPIDER_PAGECOUNT=100       # smoke test one source
+./run_discovery.sh                                          # one pass over all four sources (cron)
+```
 
 ## Documents
 

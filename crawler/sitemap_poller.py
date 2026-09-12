@@ -5,7 +5,7 @@ import argparse
 from lxml import etree
 
 import config
-from crawler.frontier import Frontier
+from crawler.frontier import Frontier, default_db_path
 
 
 def extract_urls(xml: str, pattern: str) -> list[str]:
@@ -61,7 +61,8 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--source", help="Single source to poll")
     parser.add_argument("--all", action="store_true", help="Poll all sources")
-    parser.add_argument("--db", required=True, help="Path to frontier SQLite DB")
+    parser.add_argument("--db", default=default_db_path(),
+                        help="Frontier SQLite DB (default: $FRONTIER_DB or ./frontier.db)")
     args = parser.parse_args()
 
     cfg = config.load("sources")

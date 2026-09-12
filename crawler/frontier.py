@@ -1,5 +1,12 @@
 import datetime as dt
+import os
 import sqlite3
+
+
+def default_db_path() -> str:
+    """The one frontier file the spider, the sitemap poller and run_discovery.sh
+    share: `$FRONTIER_DB`, else `frontier.db` in the current directory."""
+    return os.environ.get("FRONTIER_DB", "frontier.db")
 
 
 class Frontier:
