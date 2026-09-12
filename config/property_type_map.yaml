@@ -1,0 +1,45 @@
+batdongsan:
+  "Cho thuê chung cư mini, căn hộ dịch vụ": apartment
+  "Cho thuê căn hộ chung cư": apartment
+  "Cho thuê phòng trọ": room
+  "Cho thuê nhà riêng": house
+  "Cho thuê nhà mặt phố": shophouse
+  "Cho thuê nhà trọ, phòng trọ": room
+  "chung cư mini": apartment
+  "căn hộ dịch vụ": apartment
+  "căn hộ chung cư": apartment
+  "phòng trọ": room
+  "nhà riêng": house
+  "nhà mặt phố": shophouse
+  "nhà trọ": room
+
+phongtro123:
+  "Cho thuê căn hộ": apartment
+  "Cho thuê phòng trọ": room
+  "Cho thuê nhà nguyên căn": house
+  "Nhà ở ghép": room
+  "Cho thuê mặt bằng": shophouse
+  "Apartment": apartment
+  "căn hộ": apartment
+  "phòng trọ": room
+  "nhà nguyên căn": house
+
+mogi:
+  "Nhà trọ": room
+  "Căn hộ": apartment
+  "Căn hộ chung cư": apartment
+  "Căn hộ dịch vụ": apartment
+  "Nhà nguyên căn": house
+  "Nhà mặt tiền": shophouse
+  "Mặt bằng": shophouse
+  "Phòng trọ": room
+  "Biệt thự": house
+
+nhatot:
+  "Căn hộ/Chung cư": apartment
+  "Căn hộ dịch vụ, mini": apartment
+  "Nhà riêng": house
+  "Nhà mặt phố": shophouse
+  "Nhà phố thương mại": shophouse
+  "Phòng trọ, nhà trọ": room
+  "Nhà trọ, phòng trọ": room

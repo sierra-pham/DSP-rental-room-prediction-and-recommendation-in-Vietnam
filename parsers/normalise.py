@@ -4,8 +4,14 @@ Pure functions only — no network, no I/O. Every parser routes its raw strings
 through here so that price and area are comparable across the four sources.
 """
 
+import logging
 import re
 import unicodedata
+
+import config
+
+_log = logging.getLogger(__name__)
+_PT_MAP = None
 
 _PHONE_RE = re.compile(r"(?:\+?84|0)[\s.\-]?\d{2,3}[\s.\-]?\d{3}[\s.\-]?\d{3,4}")
 _EMAIL_RE = re.compile(r"[\w.+-]+@[\w-]+\.[\w.]+")
@@ -72,3 +78,20 @@ def parse_area_sqm(text: str) -> float | None:
     t = normalise_text(text)
     m = _AREA_RE.search(t)
     return float(m.group(1).replace(",", ".")) if m else None
+
+
+def normalise_property_type(source: str, raw: str) -> str:
+    global _PT_MAP
+    if _PT_MAP is None:
+        _PT_MAP = config.load("property_type_map")
+    if not raw:
+        return "other"
+    mapping = _PT_MAP.get(source, {})
+    if raw in mapping:
+        return mapping[raw]
+    raw_lower = raw.lower().strip()
+    for key, val in mapping.items():
+        if key.lower().strip() == raw_lower:
+            return val
+    _log.warning("Unmapped property type: source=%s raw=%r", source, raw)
+    return "other"
