@@ -5,19 +5,19 @@ and Report 4 (cost evidence) both cite this. Fill in each field when the step is
 
 | Item | Value |
 |---|---|
-| Account ID | _pending_ |
+| Account ID | `009075573702` |
 | Region | `ap-southeast-1` (Singapore) |
-| IAM principal used | _pending_ (user/role name; least-privilege: S3 on `vn-rental-dsp` only, plus Budgets/CloudWatch for setup) |
+| IAM principal used | `DSP@22` — inline policy `vn-rental-dsp-setup`, source in `infra/iam-policy-setup.json` |
 | Bucket | `s3://vn-rental-dsp/` |
-| Bucket created | _pending_ (date, via `infra/setup_s3.sh`) |
+| Bucket created | 2026-09-12, via `infra/setup_s3.sh` |
 | Public access block | all four flags `true` |
 | Prefixes | `bronze/ silver/ gold/ images/ models/` |
 | Lifecycle | `bronze/` → Intelligent-Tiering after 30 days |
 | Request metrics | filter `EntireBucket` (feeds the egress alarm) |
 | Budget | `vn-rental-dsp-monthly`, $50/month, alerts at $10 / $25 / $50 → nguyenpnt4@fpt.com |
-| Budget created | _pending_ (date, via `infra/budgets.sh`) |
-| Egress alarm | `s3-egress-high`: BytesDownloaded > 80 GB/day |
-| Verified from Python | _pending_ (`pytest tests/test_aws.py` PASS, date) |
+| Budget created | 2026-09-12, via `infra/budgets.sh` |
+| Egress alarm | `s3-egress-high`: BytesDownloaded > 80 GB/day — state `OK` at creation |
+| Verified from Python | `pytest tests/test_aws.py` PASS, 2026-09-12 |
 
 ## Notes
 
