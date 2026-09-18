@@ -6,7 +6,7 @@ element: "2.0 Data Collection System"
 hours: 2.5
 week: "2"
 week_num: 2
-status: todo
+status: done
 critical_path: true
 depends_on: ["2.3.2"]
 plan_task: ["T12"]
@@ -23,7 +23,7 @@ plan_task: ["T12"]
 
 ## Log
 
-<!-- dated notes as this package progresses -->
+- 2026-09-18: Implemented `crawler/panel_scheduler.py` with `classify_probe` detecting soft-delete pages (8 Vietnamese removal phrases). Tests in `tests/test_panel_scheduler.py` cover HTTP 200/404/500, soft-delete, and real listing pages. Probe landing in S3 deferred to EC2 deploy.
 
 ## References
 

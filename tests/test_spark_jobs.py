@@ -448,3 +448,111 @@ def test_parse_bronze_records_a_decode_failure(spark):
 
     assert rows[0]["parse_ok"] is False
     assert rows[0]["parse_error"] == "decode: UnicodeDecodeError"
+
+
+# ---------------------------------------------------------------------------
+# Task 11 — MinHash LSH deduplication
+# ---------------------------------------------------------------------------
+
+def test_dedupe_clusters_reposts(spark):
+    """Identical descriptions in the same block must share a canonical_id;
+    a distinct listing must not be merged."""
+    from spark.dedupe import build_clusters
+
+    rows = [
+        ("a", "HCM", "Q7", 25.0, 7_000_000,
+         "phòng trọ đẹp gần lotte mart có gác"),
+        ("b", "HCM", "Q7", 25.0, 7_000_000,
+         "phòng trọ đẹp gần lotte mart có gác"),
+        ("c", "HCM", "Q7", 60.0, 20_000_000,
+         "căn hộ cao cấp view sông 2 phòng ngủ"),
+    ]
+    df = spark.createDataFrame(
+        rows,
+        "listing_id string, province string, district string, "
+        "area_sqm double, asking_rent_vnd long, description_clean string",
+    )
+    out = {r["listing_id"]: r for r in build_clusters(df).collect()}
+
+    assert out["a"]["canonical_id"] == out["b"]["canonical_id"], \
+        "identical re-posts must share a canonical_id"
+    assert out["c"]["canonical_id"] != out["a"]["canonical_id"], \
+        "a distinct listing must not be merged"
+    assert out["a"]["cluster_size"] == 2
+    assert out["c"]["cluster_size"] == 1
+    assert sum(1 for r in out.values() if r["is_canonical"]) >= 2
+
+
+def test_dedupe_singletons_survive(spark):
+    """Every listing gets an output row even if it has no duplicate."""
+    from spark.dedupe import build_clusters
+
+    df = spark.createDataFrame(
+        [("x", "HCM", "Q1", 30.0, 10_000_000, "căn hộ quận một")],
+        "listing_id string, province string, district string, "
+        "area_sqm double, asking_rent_vnd long, description_clean string",
+    )
+    out = build_clusters(df).collect()
+
+    assert len(out) == 1
+    assert out[0]["listing_id"] == "x"
+    assert out[0]["canonical_id"] == "x"
+    assert out[0]["cluster_size"] == 1
+    assert out[0]["is_canonical"] is True
+
+
+# ---------------------------------------------------------------------------
+# Task 13 — Panel fact table and survival labels
+# ---------------------------------------------------------------------------
+
+def test_panel_survival_labels(spark):
+    """Censoring logic: two consecutive absences = event; single absence is
+    transient and does not fire."""
+    from spark.build_panel import survival_labels
+
+    d = lambda s: date.fromisoformat(s)
+    rows = [
+        # listing a: present 3 days, then absent twice -> event at day 3
+        ("a", d("2026-09-25"), True), ("a", d("2026-09-26"), True),
+        ("a", d("2026-09-27"), True), ("a", d("2026-09-28"), False),
+        ("a", d("2026-09-29"), False),
+        # listing b: present throughout -> right-censored
+        ("b", d("2026-09-25"), True), ("b", d("2026-09-26"), True),
+        ("b", d("2026-09-27"), True), ("b", d("2026-09-28"), True),
+        ("b", d("2026-09-29"), True),
+        # listing c: one absence then present again -> NOT an event
+        ("c", d("2026-09-25"), True), ("c", d("2026-09-26"), False),
+        ("c", d("2026-09-27"), True), ("c", d("2026-09-28"), True),
+        ("c", d("2026-09-29"), True),
+    ]
+    df = spark.createDataFrame(
+        rows, "listing_id string, obs_date date, is_present boolean"
+    )
+    out = {
+        r["listing_id"]: r
+        for r in survival_labels(df, censor_date=d("2026-09-29")).collect()
+    }
+
+    assert out["a"]["event_observed"] is True
+    assert out["a"]["duration_days"] == 3
+    assert out["b"]["event_observed"] is False
+    assert out["b"]["duration_days"] == 4
+    assert out["c"]["event_observed"] is False, \
+        "a single absence must not fire an event"
+
+
+def test_panel_survival_labels_no_presence(spark):
+    """A listing that is never present has no first_seen and is excluded."""
+    from spark.build_panel import survival_labels
+
+    d = lambda s: date.fromisoformat(s)
+    rows = [
+        ("x", d("2026-09-25"), False),
+        ("x", d("2026-09-26"), False),
+    ]
+    df = spark.createDataFrame(
+        rows, "listing_id string, obs_date date, is_present boolean"
+    )
+    out = survival_labels(df, censor_date=d("2026-09-29")).collect()
+
+    assert len(out) == 0

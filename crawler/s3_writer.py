@@ -24,6 +24,7 @@ class S3BatchWriter:
     def flush(self) -> None:
         if self._buffer.tell() > 0:
             self._flush_part()
+        self._gz.close()
 
     def _flush_part(self) -> None:
         self._gz.close()

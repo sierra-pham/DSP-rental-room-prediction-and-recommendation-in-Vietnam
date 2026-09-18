@@ -23,7 +23,7 @@ class NhatotSpider(BronzeSpider):
         "CLOSESPIDER_PAGECOUNT": 20000,
     }
 
-    def start_requests(self):
+    async def start(self):
         batch = self.frontier.next_batch(self.name, kind="discovery", limit=10000)
         for url in batch:
             yield scrapy.Request(

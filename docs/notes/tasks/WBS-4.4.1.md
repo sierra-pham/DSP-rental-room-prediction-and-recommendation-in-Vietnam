@@ -6,7 +6,7 @@ element: "4.0 Data Processing & Quality"
 hours: 1.5
 week: "3"
 week_num: 3
-status: todo
+status: done
 critical_path: false
 depends_on: ["4.3.1", "2.3.3"]
 plan_task: ["T13"]
@@ -23,7 +23,7 @@ plan_task: ["T13"]
 
 ## Log
 
-<!-- dated notes as this package progresses -->
+- 2026-09-18: Panel fact table logic is part of `spark/build_panel.py`. The `survival_labels` function reads (listing_id, obs_date, is_present) and produces the fact rows. The `__main__` block writes `gold/panel_fact/` partitioned by listing_id.
 
 ## References
 

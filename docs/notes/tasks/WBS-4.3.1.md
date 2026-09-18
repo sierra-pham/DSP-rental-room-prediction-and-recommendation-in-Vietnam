@@ -6,7 +6,7 @@ element: "4.0 Data Processing & Quality"
 hours: 4
 week: "2"
 week_num: 2
-status: todo
+status: done
 critical_path: false
 depends_on: ["4.1.3"]
 plan_task: ["T11"]
@@ -23,7 +23,7 @@ plan_task: ["T11"]
 
 ## Log
 
-<!-- dated notes as this package progresses -->
+- 2026-09-18: Implemented `spark/dedupe.py` with character 3-gram shingling, blocking key, MinHashLSH (5 tables, Jaccard distance ≤ 0.20), union-find connected components. Tests `test_dedupe_clusters_reposts` and `test_dedupe_singletons_survive` added. Manual cluster validation deferred to live data.
 
 ## References
 

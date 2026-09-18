@@ -1,3 +1,4 @@
+import asyncio
 from datetime import datetime, timezone
 
 import scrapy
@@ -11,6 +12,12 @@ from crawler.spiders.nhatot import NhatotSpider
 
 ALL_SPIDERS = [BatdongsanSpider, MogiSpider, Phongtro123Spider, NhatotSpider]
 NAMES = ["batdongsan", "mogi", "phongtro123", "nhatot"]
+
+
+def _collect_start(spider):
+    async def _gather():
+        return [r async for r in spider.start()]
+    return asyncio.run(_gather())
 
 
 def test_base_spider_has_no_name():
@@ -86,7 +93,7 @@ def test_only_nhatot_enables_playwright():
 def test_non_playwright_spiders_send_plain_requests(spider_cls, name, tmp_path):
     spider = spider_cls(db_path=str(tmp_path / "f.db"))
     spider.frontier.add_urls(name, [f"https://{name}.example/x-1"])
-    requests = list(spider.start_requests())
+    requests = _collect_start(spider)
     assert len(requests) == 1
     assert "playwright" not in requests[0].meta
 
@@ -94,6 +101,6 @@ def test_non_playwright_spiders_send_plain_requests(spider_cls, name, tmp_path):
 def test_nhatot_sends_playwright_meta_on_requests(tmp_path):
     spider = NhatotSpider(db_path=str(tmp_path / "f.db"))
     spider.frontier.add_urls("nhatot", ["https://nhatot.example/x-1"])
-    requests = list(spider.start_requests())
+    requests = _collect_start(spider)
     assert len(requests) == 1
     assert requests[0].meta["playwright"] is True

@@ -6,7 +6,7 @@ element: "4.0 Data Processing & Quality"
 hours: 1.5
 week: "3"
 week_num: 3
-status: todo
+status: done
 critical_path: true
 depends_on: ["4.4.1"]
 plan_task: ["T13"]
@@ -23,7 +23,7 @@ plan_task: ["T13"]
 
 ## Log
 
-<!-- dated notes as this package progresses -->
+- 2026-09-18: Implemented `survival_labels` in `spark/build_panel.py`. Two-consecutive-absences rule using `lead()` window function. Tests `test_panel_survival_labels` and `test_panel_survival_labels_no_presence` in `test_spark_jobs.py` verify censoring logic and single-absence resilience.
 
 ## References
 

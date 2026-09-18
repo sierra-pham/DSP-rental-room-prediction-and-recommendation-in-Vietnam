@@ -39,3 +39,6 @@ data/
 
 # Claude Code: machine-specific permissions, never commit
 .claude/settings.local.json
+
+
+.log

@@ -12,9 +12,9 @@ rent at that price?*
 | Path | Purpose |
 |---|---|
 | `config/` | YAML config + `config.load(name)` loader. Bucket names, source definitions, Spark settings. |
-| `crawler/` | Scrapy project: sitemap poller, SQLite frontier, spiders, S3 bronze writer. |
-| `parsers/` | Pure functions `html -> dict`. No network. Unit-tested against saved fixtures. |
-| `spark/` | PySpark jobs: bronze→silver parse, dedup, panel fact table, features, models. |
+| `crawler/` | Scrapy project: sitemap poller, SQLite frontier, spiders, S3 bronze writer, panel probe classifier. |
+| `parsers/` | Pure functions `html → dict`. No network. Unit-tested against saved fixtures. |
+| `spark/` | PySpark jobs: bronze→silver parse (`parse_bronze`), near-duplicate detection (`dedupe`), panel fact table with survival labels (`build_panel`), features, models. |
 | `analysis/` | EDA, visualisation, prescriptive layer. |
 | `infra/` | AWS / Oracle Cloud setup scripts. |
 | `tests/` | pytest suite; `tests/fixtures/` holds saved HTML. |
@@ -32,6 +32,7 @@ pytest
 ```
 
 Requires Python 3.11+. PySpark 3.5.1 must match the Spark version on the cluster.
+Note: PySpark is not yet available on Python 3.14; use 3.12 for Spark development.
 
 ## Crawling
 
@@ -48,6 +49,30 @@ scrapy crawl phongtro123 -s CLOSESPIDER_PAGECOUNT=100       # smoke test one sou
 Bronze `dt=` partitions and the parse job's `--date` are **UTC** days, the same clock
 `crawl_ts` uses; a run that crosses 00:00 UTC keeps writing under the day it started on,
 so the tail of that run is parsed by the next day's job.
+
+## Spark pipeline
+
+All jobs read from / write to `s3://vn-rental-dsp/` and are idempotent (re-running with the
+same arguments produces identical output).
+
+```bash
+# Bronze → Silver: parse HTML, normalise fields, strip PII, run quality gates
+spark-submit spark/parse_bronze.py --date 2026-09-18
+
+# Near-duplicate detection: MinHash LSH with character 3-gram shingling
+spark-submit spark/dedupe.py --date 2026-09-18
+
+# Panel fact table: daily observation matrix + survival labels (two-consecutive-absences rule)
+spark-submit spark/build_panel.py --censor-date 2026-10-12
+```
+
+## Panel monitoring
+
+`crawler/panel_scheduler.py` classifies probe responses for panel tracking:
+
+- Detects soft-deletes (HTTP 200 with Vietnamese removal phrases like "tin đăng không tồn tại")
+- HTTP 404/410 → absent; HTTP 5xx → inconclusive (does not count as absence)
+- Used by the panel probe spider to maintain `is_present` observations
 
 ## Documents
 
