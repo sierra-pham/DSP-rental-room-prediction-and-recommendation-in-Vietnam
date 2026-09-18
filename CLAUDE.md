@@ -117,19 +117,47 @@ export JAVA_HOME="$USERPROFILE/tools/jdk4py/jdk4py/java-runtime" PYTHONIOENCODIN
 
 ---
 
+## EC2 crawl host (deployed 2026-09-18)
+
+- **Instance:** `t3.micro` in `ap-southeast-1`, Ubuntu 24.04, 20 GB gp3
+- **IP:** `13.214.35.141` — SSH key: `vn-rental-crawl-key.pem`
+- **IAM role:** `vn-rental-crawl` (instance profile, no credentials on disk)
+- **Repo:** `/opt/vn-rental-dsp`, venv at `.venv` (Python 3.12), Playwright + Chromium installed
+- **Frontier:** `/var/data/frontier.db` — 626k URLs (phongtro123: 146k, mogi: 480k)
+- **Logs:** `/opt/vn-rental-dsp/logs/`
+- **Infra files:** `infra/deploy_ec2.sh`, `infra/crontab.txt`, `infra/iam-ec2-crawl-role.json`
+- **Design spec:** `docs/superpowers/specs/2026-09-18-ec2-crawl-deployment-design.md`
+- **Plan:** `docs/superpowers/plans/2026-09-18-ec2-crawl-deployment.md`
+
+### Smoke test results (2026-09-18)
+
+- **phongtro123:** 115 pages in 147s, bronze landed in S3 ✓
+- **mogi:** 115 pages in 149s, bronze landed in S3 ✓
+- **batdongsan:** sitemap returns 403 (blocked by site, not proxy)
+- **nhatot:** sitemap returns 403 (blocked by site, not proxy)
+
+### Remaining EC2 steps
+
+1. Verify bronze data in S3 for today's smoke test (`aws s3 ls s3://vn-rental-dsp/bronze/listings/dt=2026-09-18/`)
+2. Install cron: `crontab /opt/vn-rental-dsp/infra/crontab.txt`
+3. Next-day validation: check 4 source prefixes in bronze, >= 2,000 pages/source
+4. Investigate batdongsan/nhatot 403 — may need request headers or Cloudflare handling in sitemap poller
+
+---
+
 ## What is deferred to live environments (as of 2026-09-18)
 
 | Step | Blocked on | Where it is logged |
 |---|---|---|
-| Full cron schedule for all four spiders on crawl-host; batdongsan and nhatot sitemaps return 403 behind proxy | EC2 host (no corporate proxy) | `WBS-2.2.3`, `WBS-2.4.1` |
+| Batdongsan and nhatot sitemap seeding; sitemaps return 403 even from EC2 | Site-level blocking (not proxy); needs Cloudflare bypass or alt URL discovery | `WBS-2.2.3`, `WBS-2.4.1` |
 | Run `spark/parse_bronze.py --date …` on the cluster; the parquet write path has **never executed** | Oracle cluster; `infra/submit.sh` does not exist yet | `WBS-4.1.3` |
 | Run `spark/dedupe.py --date …` and `spark/build_panel.py --censor-date …` on the cluster | Oracle cluster | `WBS-4.3.1`, `WBS-4.4.1` |
 | Executors import `parsers.*` inside `mapPartitions`; `submit.sh` must `pip install -e .` on every node or pass `--py-files` | Task 10 | `WBS-4.1.3` |
 | Report 1 screenshot of live bronze; provisional cohort freeze | live data | plan Task 8 |
 
-**Crawler deadline met 2026-09-18.** First bronze crawl: phongtro123 (10.6 MB) and mogi (10.2 MB)
-landed in `s3://vn-rental-dsp/bronze/listings/dt=2026-09-18/`. Batdongsan and nhatot pending
-deployment from a non-proxied host.
+**EC2 deployed 2026-09-18.** phongtro123 and mogi smoke-tested on EC2 (115 pages each, bronze
+in S3). Cron not yet installed. Batdongsan and nhatot sitemaps return 403 from EC2 too — this is
+site-level blocking, not the corporate proxy.
 
 ---
 
