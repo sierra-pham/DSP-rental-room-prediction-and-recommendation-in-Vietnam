@@ -1,0 +1,14 @@
+# VN Rental DSP — crawl cron schedule (all times UTC)
+# Install: crontab /opt/vn-rental-dsp/infra/crontab.txt
+
+# 01:00 UTC — Refresh the frontier from sitemaps (new listings discovered daily)
+0 1 * * *  cd /opt/vn-rental-dsp && FRONTIER_DB=/var/data/frontier.db .venv/bin/python -m crawler.sitemap_poller --all >> /opt/vn-rental-dsp/logs/poll.log 2>&1
+
+# 02:00 UTC — Discovery crawl: one pass over all four sources
+0 2 * * *  cd /opt/vn-rental-dsp && SCRAPY=.venv/bin/scrapy PYTHON=.venv/bin/python FRONTIER_DB=/var/data/frontier.db ./run_discovery.sh >> /opt/vn-rental-dsp/logs/crawl.log 2>&1
+
+# Hourly — Checkpoint WAL then back up frontier state to S3
+0 * * * *  sqlite3 /var/data/frontier.db "PRAGMA wal_checkpoint(FULL);" && aws s3 cp /var/data/frontier.db s3://vn-rental-dsp/state/frontier.db 2>/dev/null
+
+# Weekly — Rotate logs (compress, keep 4 weeks)
+0 0 * * 0  for f in /opt/vn-rental-dsp/logs/*.log; do [ -f "$f" ] && mv "$f" "$f.$(date +\%F)" && gzip "$f.$(date +\%F)"; done; find /opt/vn-rental-dsp/logs -name '*.log.*.gz' -mtime +28 -delete
